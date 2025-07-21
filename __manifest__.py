@@ -18,12 +18,12 @@
         "website_slides",
         "website",
     ],
-    "data": [
-        "views/slide_templates.xml",  # for assets (script include)
-    ],
+    # "data": [
+    #     "views/slide_templates.xml",  # for assets (script include)
+    # ],
     "assets": {
         "website.assets_frontend": [
-            "slides_course_search_extension/static/src/js/slide_channel_list_extended.js",
+            "/slides_course_search_extension/static/src/js/slide_channel_list_extended.js",
         ],
     },
     "auto_install": False,
