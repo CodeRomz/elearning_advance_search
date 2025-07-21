@@ -5,8 +5,8 @@
     inherit_id="website_slides.courses_all"
     name="Show matched slide content below All Courses"
   >
-    <!-- insert after the channel list container -->
-    <xpath expr="//div[@id='o_wslides_channel_main']" position="after">
+    <!-- Insert *after* the <section id="o_wslides_channel_all"> that holds the course cards -->
+    <xpath expr="//section[@id='o_wslides_channel_all']" position="after">
       <t t-if="matched_slides">
         <section class="container my-5">
           <h4>Matched Content</h4>
