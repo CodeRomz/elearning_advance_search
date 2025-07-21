@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-    <template id="slide_channels_inherit" inherit_id="website_slides.slide_channels" name="Enhanced Slide Channel Search">
+    <template id="slide_channels_inherit" inherit_id="website_slides.channel_list" name="Enhanced Slide Channel Search">
+
         <!-- Search Bar Override -->
-        <xpath expr="//form[@id='slides_search_form']" position="replace">
+        <xpath expr="//form[contains(@id, 'slides_search_form')]" position="replace">
             <form method="get" id="slides_search_form">
                 <div class="input-group">
                     <input type="text" name="search" class="form-control" placeholder="Search courses, slides, tags..." t-att-value="search_term"/>
@@ -11,8 +12,8 @@
             </form>
         </xpath>
 
-        <!-- Slides Pagination + Results (below courses) -->
-        <xpath expr="//div[@id='o_wslides_channel_main']" position="after">
+        <!-- Slides Pagination + Results -->
+        <xpath expr="//div[contains(@class, 'o_wslides_channel_main')]" position="after">
             <t t-if="slides">
                 <div class="mt-5">
                     <h3>Matched Slides</h3>
@@ -36,5 +37,6 @@
                 </div>
             </t>
         </xpath>
+
     </template>
 </odoo>
