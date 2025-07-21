@@ -1,42 +1,74 @@
-from odoo import http, _
+# slides_course_search_extension/controllers/advanced_slide_search.py
+from odoo import http
 from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
+from odoo.osv import expression
 
-class AdvancedSlideSearch(WebsiteSlides):
+class WebsiteSlidesExtended(WebsiteSlides):
+    @http.route(
+        ['/slides/all', '/slides/all/tag/'],
+        type='http', auth="public", website=True, sitemap=True
+    )
+    def slides_channel_all(self, slide_category=None, slug_tags=None, my=False, **post):
+        """
+        Delegate to parent for all the GET/redirect logic,
+        then our slides_channel_all_values will apply the extended search.
+        """
+        return super().slides_channel_all(
+            slide_category=slide_category,
+            slug_tags=slug_tags,
+            my=my,
+            **post
+        )
 
-    @http.route(['/slides/all'], type='http', auth='public', website=True, sitemap=True)
-    def slides_all(self, tag=None, level=None, role=None, search=None, **kwargs):
-        SlideChannel = request.env['slide.channel'].sudo()
+    def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False, **post):
+        """
+        1) Call the original to assemble all the standard context:
+           searchbar, pager, tag_groups, search_tags, sortings, etc.
+        2) If `post['search']` is set, replace `values['channels']`
+           and `values['search_count']` with our extended-domain results.
+        """
+        # 1) Fetch the original values
+        values = super().slides_channel_all_values(
+            slide_category=slide_category,
+            slug_tags=slug_tags,
+            my=my,
+            **post
+        )
 
-        domain = [('is_published', '=', True)]
+        search_term = (post.get('search') or "").strip()
+        if search_term:
+            # Base: only published channels
+            domain = [('website_published', '=', True)]
 
-        if tag:
-            domain += [('tag_ids.name', '=', tag)]
-        if level:
-            domain += [('level', '=', level)]
-        if role:
-            domain += [('role', '=', role)]
+            # Preserve any existing filters:
+            if slug_tags:
+                # this helper returns a recordset of the selected tags
+                tag_rs = self._channel_search_tags_slug(slug_tags)
+                domain.append(('tag_ids', 'in', tag_rs.ids))
+            if slide_category:
+                domain.append(('slide_category', '=', slide_category))
+            if my:
+                domain.append(('member_ids.user_id', '=', request.env.user.id))
 
-        if search:
-            search_domain = [
-                '|', '|', '|',
-                ('name', 'ilike', search),                 # Channel title
-                ('description', 'ilike', search),          # Channel description
-                ('slide_ids.name', 'ilike', search),       # Slide title
-                ('slide_ids.description', 'ilike', search) # Slide body
+            # Build OR list for title/desc/tags/slides:
+            or_list = [
+                ('name', 'ilike', search_term),                   # Channel title
+                ('description', 'ilike', search_term),            # Channel description
+                ('tag_ids.name', 'ilike', search_term),           # Channel tags
+                ('slide_ids.name', 'ilike', search_term),         # Slide title
+                ('slide_ids.html_content', 'ilike', search_term), # Slide HTML body
             ]
-            domain = ['&'] + domain + search_domain
+            # Combine domain + OR-list
+            domain = expression.AND([domain, expression.OR(or_list)])
 
-        channels = SlideChannel.search(domain)
+            # Use sudo read-only search
+            Channel = request.env['slide.channel'].sudo()
+            channels = Channel.search(domain)
 
-        # Reuse private helper to preserve tag filters
-        tag_groups = self._get_tag_groups(channels)
-
-        return request.render("website_slides.courses_all", {
-            'channels': channels,
-            'tag': tag,
-            'level': level,
-            'role': role,
-            'search': search,
-            'tag_groups': tag_groups,
-        })
+            # Overwrite the two places the template uses them:
+            values.update({
+                'channels':     channels,
+                'search_count': len(channels),
+            })
+        return values
