@@ -5,7 +5,7 @@
     inherit_id="website_slides.courses_all"
     name="Show matched slide content below All Courses"
   >
-    <!--  Insert our matched_slides immediately after the pager call  -->
+    <!-- Insert our matched_slides immediately _after_ the pager call -->
     <xpath expr="//t[@t-call='website.pager']" position="after">
       <t t-if="matched_slides">
         <section class="container my-5">
