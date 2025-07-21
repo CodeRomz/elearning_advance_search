@@ -1,27 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-  <template id="slide_channels_inherit" inherit_id="website_slides.channel_main" name="Enhanced Slide Channel Search">
+  <template id="slide_channels_inherit" inherit_id="website_slides.owl_channel_list_page" name="Enhanced Slide Channel Search">
 
-    <!-- Override Search Bar -->
-    <xpath expr="//form[@id='slide_channel_search_form']" position="replace">
-      <form method="get" id="slide_channel_search_form">
-        <div class="input-group">
-          <input type="text" name="search" class="form-control"
-                 placeholder="Search courses, slides, tags..." t-att-value="search_term"/>
+    <!-- Inject static form BEFORE OWL Component -->
+    <xpath expr="//div[@class='o_wslides_channel_main']" position="before">
+      <div class="container my-3">
+        <form method="get" class="d-flex gap-2">
+          <input type="text" name="search" class="form-control" placeholder="Search courses, slides, tags..." t-att-value="search_term"/>
           <button class="btn btn-primary" type="submit">Search</button>
-        </div>
-      </form>
+        </form>
+      </div>
     </xpath>
 
-    <!-- Pagination + Slide Results -->
-    <xpath expr="//div[contains(@class, 'o_wslides_channel_main')]" position="after">
+    <!-- Matched Slides Pagination & Cards -->
+    <xpath expr="//div[@class='o_wslides_channel_main']" position="after">
       <t t-if="slides">
-        <div class="mt-5">
-          <h3>Matched Slides</h3>
+        <div class="container mt-4">
+          <h4>Matched Slides</h4>
           <div class="row">
             <t t-foreach="slides" t-as="slide">
               <div class="col-md-4">
-                <div class="card mb-3 shadow-sm">
+                <div class="card mb-3">
                   <div class="card-body">
                     <h5 class="card-title">
                       <a t-att-href="'/slides/%d' % slide.id" t-esc="slide.name"/>

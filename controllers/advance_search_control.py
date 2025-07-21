@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from odoo import http, _, tools
 from odoo.http import request
 from odoo.exceptions import UserError, ValidationError, RedirectWarning, AccessDenied, AccessError, CacheMiss, MissingError
@@ -49,7 +48,7 @@ class SlideSearchExtension(http.Controller):
             _logger.info("[Slides Search] Search completed for: %s", search_term)
 
         finally:
-            return request.render("website_slides.slide_channels", {
+            return request.render("website_slides.owl_channel_list_page", {
                 'search_term': search_term,
                 'channels': channel_obj,
                 'slides': paged_slides,
