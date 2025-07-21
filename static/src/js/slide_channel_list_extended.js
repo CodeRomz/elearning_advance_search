@@ -1,23 +1,23 @@
 /** @odoo-module **/
 
-import { registry } from "@web/core/registry";
-import { SlideChannelList } from "@website_slides/js/slides_channel_list";
+import { SlideChannelList } from '@website_slides/js/slides_course';
+import { patch } from '@web/core/utils/patch';
 
-class SlideChannelListExtended extends SlideChannelList {
+patch(SlideChannelList.prototype, 'slides_course_search_extension', {
+    /**
+     * Patch willStart to inject additional search domain
+     */
     async willStart() {
-        await super.willStart();
-
-        const searchTerm = this.env.searchParams.search || "";
-        if (searchTerm) {
-            const result = await this.rpc("/slides/extended_search", { search: searchTerm });
-            this.extraSlides = result.slides;
-            this.hasSearchResults = result.slides.length > 0;
-        } else {
-            this.extraSlides = [];
-            this.hasSearchResults = false;
+        await this._super(...arguments);
+        const search = (this.search || "").trim();
+        if (search) {
+            // Extend the domain with course name, slide name, and description
+            this.domain = [
+                "|", "|",
+                ["name", "ilike", search],                 // Course Title
+                ["description", "ilike", search],          // Course Description
+                ["slide_ids.name", "ilike", search],       // Slide Title
+            ];
         }
-    }
-}
-
-SlideChannelListExtended.template = "website_slides.SlideChannelList";
-registry.category("slides").add("SlideChannelListExtended", SlideChannelListExtended);
+    },
+});

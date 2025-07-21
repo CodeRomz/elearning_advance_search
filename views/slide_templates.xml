@@ -1,8 +1,0 @@
-<!-- slide_templates.xml -->
-<odoo>
-  <template id="assets_frontend" inherit_id="website.assets_frontend" name="Slides Search Assets">
-    <xpath expr="." position="inside">
-      <script type="module" src="/slides_course_search_extension/static/src/js/slide_channel_list_extended.js"/>
-    </xpath>
-  </template>
-</odoo>
