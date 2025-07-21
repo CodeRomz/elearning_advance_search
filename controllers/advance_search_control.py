@@ -7,7 +7,6 @@ class AdvancedSlideSearch(WebsiteSlides):
     @http.route(['/slides/all'], type='http', auth='public', website=True, sitemap=True)
     def slides_all(self, tag=None, level=None, role=None, search=None, **kwargs):
         SlideChannel = request.env['slide.channel'].sudo()
-        Slide = request.env['slide.slide'].sudo()
 
         domain = [('is_published', '=', True)]
 
