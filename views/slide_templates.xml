@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <template id="slide_channels_inherit" inherit_id="website_slides.slide_channels" name="Enhanced Slide Channel Search">
+        <!-- Search Bar Override -->
+        <xpath expr="//form[@id='slides_search_form']" position="replace">
+            <form method="get" id="slides_search_form">
+                <div class="input-group">
+                    <input type="text" name="search" class="form-control" placeholder="Search courses, slides, tags..." t-att-value="search_term"/>
+                    <button class="btn btn-primary" type="submit">Search</button>
+                </div>
+            </form>
+        </xpath>
+
+        <!-- Slides Pagination + Results (below courses) -->
+        <xpath expr="//div[@id='o_wslides_channel_main']" position="after">
+            <t t-if="slides">
+                <div class="mt-5">
+                    <h3>Matched Slides</h3>
+                    <div class="row">
+                        <t t-foreach="slides" t-as="slide">
+                            <div class="col-md-4">
+                                <div class="card mb-3 shadow-sm">
+                                    <div class="card-body">
+                                        <h5 class="card-title">
+                                            <a t-att-href="'/slides/%d' % slide.id" t-esc="slide.name"/>
+                                        </h5>
+                                        <p class="card-text" t-esc="slide.description"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </t>
+                    </div>
+                    <div class="text-center">
+                        <t t-call="website.pager"/>
+                    </div>
+                </div>
+            </t>
+        </xpath>
+    </template>
+</odoo>
