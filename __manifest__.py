@@ -17,11 +17,9 @@
     "depends": [
         "website_slides",
     ],
-    # "assets": {
-    #     "website.assets_frontend": [
-    #         "/slides_course_search_extension/static/src/js/slide_channel_list_extended.js",
-    #     ],
-    # },
+    "data": [
+        "views/slide_templates.xml",
+    ],
     "auto_install": False,
     "installable": True,
     "application": False,
