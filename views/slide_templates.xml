@@ -1,42 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-  <template id="slide_channels_inherit" inherit_id="website_slides.owl_channel_list_page" name="Enhanced Slide Channel Search">
-
-    <!-- Inject static form BEFORE OWL Component -->
-    <xpath expr="//div[@class='o_wslides_channel_main']" position="before">
-      <div class="container my-3">
-        <form method="get" class="d-flex gap-2">
-          <input type="text" name="search" class="form-control" placeholder="Search courses, slides, tags..." t-att-value="search_term"/>
-          <button class="btn btn-primary" type="submit">Search</button>
-        </form>
-      </div>
-    </xpath>
-
-    <!-- Matched Slides Pagination & Cards -->
-    <xpath expr="//div[@class='o_wslides_channel_main']" position="after">
-      <t t-if="slides">
-        <div class="container mt-4">
-          <h4>Matched Slides</h4>
-          <div class="row">
-            <t t-foreach="slides" t-as="slide">
-              <div class="col-md-4">
-                <div class="card mb-3">
-                  <div class="card-body">
-                    <h5 class="card-title">
-                      <a t-att-href="'/slides/%d' % slide.id" t-esc="slide.name"/>
-                    </h5>
-                    <p class="card-text" t-esc="slide.description"/>
+  <template id="slide_search_inject" inherit_id="website.layout" name="Slide Search HTML Injector">
+    <xpath expr="//div[@id='wrap']" position="inside">
+      <t t-if="'/slides' in request.httprequest.path">
+        <div class="container my-4">
+          <form method="get" class="d-flex gap-2">
+            <input type="text" name="search" class="form-control" placeholder="Search courses, slides, tags..." t-att-value="search_term"/>
+            <button class="btn btn-primary" type="submit">Search</button>
+          </form>
+        </div>
+        <t t-if="slides">
+          <div class="container my-5">
+            <h4>Matched Slides</h4>
+            <div class="row">
+              <t t-foreach="slides" t-as="slide">
+                <div class="col-md-4">
+                  <div class="card mb-3 shadow">
+                    <div class="card-body">
+                      <h5 class="card-title">
+                        <a t-att-href="'/slides/%d' % slide.id" t-esc="slide.name"/>
+                      </h5>
+                      <p class="card-text" t-esc="slide.description"/>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </t>
+              </t>
+            </div>
+            <div class="text-center">
+              <t t-call="website.pager"/>
+            </div>
           </div>
-          <div class="text-center">
-            <t t-call="website.pager"/>
-          </div>
-        </div>
+        </t>
       </t>
     </xpath>
-
   </template>
 </odoo>
