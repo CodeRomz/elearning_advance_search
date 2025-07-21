@@ -1,7 +1,8 @@
 from odoo import http, _
 from odoo.http import request
-from odoo.exceptions import MissingError, UserError
+from odoo.exceptions import UserError, MissingError, AccessError, AccessDenied, RedirectWarning, ValidationError, CacheMiss
 import logging
+
 _logger = logging.getLogger(__name__)
 
 class SlideCourseSearchController(http.Controller):
@@ -12,13 +13,13 @@ class SlideCourseSearchController(http.Controller):
             SlideChannel = request.env['slide.channel'].sudo()
             domain = [('website_published', '=', True)]
 
-            # Search logic (slides and channel titles, description, tags)
             if search:
                 domain += ['|', '|', '|',
-                           ('name', 'ilike', search),
-                           ('description', 'ilike', search),
-                           ('tag_ids.name', 'ilike', search),
-                           ('slide_ids.name', 'ilike', search)]
+                    ('name', 'ilike', search),            # channel name
+                    ('description', 'ilike', search),     # channel description
+                    ('tag_ids.name', 'ilike', search),    # tags
+                    ('slide_ids.name', 'ilike', search)   # slide titles
+                ]
 
             total = SlideChannel.search_count(domain)
             pager = request.website.pager(
@@ -31,13 +32,18 @@ class SlideCourseSearchController(http.Controller):
 
             channels = SlideChannel.search(domain, limit=12, offset=pager['offset'], order=order)
 
-            values = request.env['slide.channel']._prepare_website_values(
+            # Use native helper for rendering context
+            values = SlideChannel._prepare_website_values(
                 channels=channels,
                 search=search,
                 order=order,
                 page=page,
                 tag_id=tag_id,
             )
+
+            values.update({
+                'pager': pager,
+            })
 
             return request.render('website_slides.courses_all', values)
 
