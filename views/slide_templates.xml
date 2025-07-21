@@ -1,8 +1,12 @@
+<!-- slides_course_search_extension/views/slide_templates.xml -->
 <odoo>
-  <template id="matched_slides_extension" inherit_id="website_slides.slide_channels">
-    <!-- Insert after the course cards container -->
+  <template
+    id="matched_slides_extension"
+    inherit_id="website_slides.courses_all"
+    name="Show matched slide content below All Courses"
+  >
+    <!-- insert after the channel list container -->
     <xpath expr="//div[@id='o_wslides_channel_main']" position="after">
-      <!-- Display matched slides if any -->
       <t t-if="matched_slides">
         <section class="container my-5">
           <h4>Matched Content</h4>
@@ -13,8 +17,10 @@
                   <div class="card-body">
                     <h5 class="card-title" t-esc="slide.name"/>
                     <p class="card-text" t-esc="slide.description"/>
-                    <a t-att-href="'/slides/%s' % slide.channel_id.id"
-                       class="btn btn-sm btn-outline-primary mt-2">
+                    <a
+                      t-att-href="'/slides/%s' % slide.channel_id.id"
+                      class="btn btn-sm btn-outline-primary mt-2"
+                    >
                       View in Course
                     </a>
                   </div>
