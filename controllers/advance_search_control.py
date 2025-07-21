@@ -1,52 +1,34 @@
 from odoo import http, _
 from odoo.http import request
-from odoo.exceptions import UserError, MissingError, AccessError, AccessDenied, RedirectWarning, ValidationError, CacheMiss
+from odoo.addons.website_slides.controllers.main import WebsiteSlides
 import logging
 
 _logger = logging.getLogger(__name__)
 
-class SlideCourseSearchController(http.Controller):
+
+class WebsiteSlidesExtended(WebsiteSlides):
 
     @http.route(['/slides/all'], type='http', auth="public", website=True, sitemap=True)
-    def custom_slide_search(self, search='', tag_id=None, page=1, order='name asc', **kwargs):
-        try:
-            SlideChannel = request.env['slide.channel'].sudo()
-            domain = [('website_published', '=', True)]
+    def custom_slide_search(self, **kwargs):
+        search_term = kwargs.get('search')
+        domain = [('website_published', '=', True)]
 
-            if search:
-                domain += ['|', '|', '|',
-                    ('name', 'ilike', search),            # channel name
-                    ('description', 'ilike', search),     # channel description
-                    ('tag_ids.name', 'ilike', search),    # tags
-                    ('slide_ids.name', 'ilike', search)   # slide titles
-                ]
+        if search_term:
+            search_term = search_term.strip()
+            # Extend the search to title, description, tags, and slide contents
+            domain += ['|', '|', '|',
+                       ('name', 'ilike', search_term),
+                       ('description', 'ilike', search_term),
+                       ('tag_ids.name', 'ilike', search_term),
+                       ('slide_ids.name', 'ilike', search_term)]
 
-            total = SlideChannel.search_count(domain)
-            pager = request.website.pager(
-                url="/slides/all",
-                total=total,
-                page=page,
-                step=12,
-                url_args={'search': search, 'tag_id': tag_id, 'order': order},
-            )
+        channels = request.env['slide.channel'].sudo().search(domain)
 
-            channels = SlideChannel.search(domain, limit=12, offset=pager['offset'], order=order)
-
-            # Use native helper for rendering context
-            values = SlideChannel._prepare_website_values(
-                channels=channels,
-                search=search,
-                order=order,
-                page=page,
-                tag_id=tag_id,
-            )
-
-            values.update({
-                'pager': pager,
-            })
-
-            return request.render('website_slides.courses_all', values)
-
-        except Exception as e:
-            _logger.error("Error in custom /slides/all search controller: %s", e)
-            raise e
+        values = {
+            'tag_groups': request.env['slide.channel.tag'].sudo().get_tag_groups(),
+            'search': search_term,
+            'search_tags': [],  # Preserved for QWeb compatibility
+            'slides': channels,
+            'channels': channels,
+        }
+        return request.render("website_slides.courses_all", values)
