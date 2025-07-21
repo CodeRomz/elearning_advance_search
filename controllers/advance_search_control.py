@@ -1,7 +1,11 @@
-from odoo import http
+# Directory: slides_course_search_extension/controllers/advanced_slide_search.py
+from odoo import http, _
 from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
 from odoo.osv import expression
+import logging
+
+_logger = logging.getLogger(__name__)
 
 class WebsiteSlidesExtended(WebsiteSlides):
 
@@ -11,7 +15,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
     )
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
-        # Delegate to parent (handles filters, redirects, initial context)
+        # Delegate to the parent for default filters, redirects, etc.
         return super().slides_channel_all(
             slide_category=slide_category,
             slug_tags=slug_tags,
@@ -23,7 +27,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
 
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
-        # 1) Get the original context: searchbar, tag_groups, pager, channels, etc.
+        # Start with the original context: channels, pager, etc.
         values = super().slides_channel_all_values(
             slide_category=slide_category,
             slug_tags=slug_tags,
@@ -33,71 +37,65 @@ class WebsiteSlidesExtended(WebsiteSlides):
             **post
         )
 
-        # 2) If a search term is provided, extend the search
         search_term = (post.get('search') or '').strip()
         if search_term:
-            # --- CHANNEL SEARCH DOMAINS ---
-            base = [('website_published', '=', True)]
+            # 1) Build domain for channels (already in parent) and reused in channel search
+            base_chan_dom = [('website_published', '=', True)]
             if slug_tags:
                 tag_rs = self._channel_search_tags_slug(slug_tags)
-                base.append(('tag_ids', 'in', tag_rs.ids))
+                base_chan_dom.append(('tag_ids', 'in', tag_rs.ids))
             if slide_category:
-                base.append(('slide_category', '=', slide_category))
+                base_chan_dom.append(('slide_category', '=', slide_category))
             if my:
-                base.append(('member_ids.user_id', '=', request.env.user.id))
+                base_chan_dom.append(('member_ids.user_id', '=', request.env.user.id))
 
-            chan_clauses = [
+            # 2) Extended OR clauses for channel-level search
+            chan_or = [
                 [('name', 'ilike', search_term)],
                 [('description', 'ilike', search_term)],
                 [('tag_ids.name', 'ilike', search_term)],
-                [('slide_ids.name', 'ilike', search_term)],
-                [('slide_ids.html_content', 'ilike', search_term)],
             ]
-            chan_search = expression.AND([base, expression.OR(chan_clauses)])
+            chan_search_dom = expression.AND([base_chan_dom, expression.OR(chan_or)])
 
+            # 3) Re-page channels manually to avoid KeyError on pager['step']
             Channel = request.env['slide.channel'].sudo()
-            total = Channel.search_count(chan_search)
+            total_chan = Channel.search_count(chan_search_dom)
             per_page = self._slides_per_page
             offset = (int(page) - 1) * per_page
-
             pager = request.website.pager(
                 url="/slides/all",
-                total=total,
+                total=total_chan,
                 page=page,
                 step=per_page,
                 url_args={**post, 'search': search_term},
             )
             channels = Channel.search(
-                chan_search,
+                chan_search_dom,
                 limit=per_page,
                 offset=offset,
-                order=self._channel_order_by_criterion.get(sorting) or 'name asc'
+                order=self._channel_order_by_criterion.get(sorting) or 'name asc',
             )
 
-            # --- SLIDE SEARCH DOMAINS ---
-            slide_base = [('website_published', '=', True)]
-            if slug_tags:
-                slide_base.append(('tag_ids', 'in', tag_rs.ids))
-            if my:
-                slide_base.append(('member_ids.user_id', '=', request.env.user.id))
-
-            slide_clauses = [
+            # 4) Build a domain to pull matching slides *across all channels*
+            Slide = request.env['slide.slide'].sudo()
+            slide_or = [
                 [('name', 'ilike', search_term)],
                 [('description', 'ilike', search_term)],
                 [('html_content', 'ilike', search_term)],
                 [('tag_ids.name', 'ilike', search_term)],
+                [('channel_id.name', 'ilike', search_term)],
             ]
-            slide_search = expression.AND([slide_base, expression.OR(slide_clauses)])
+            slide_dom = expression.AND([[('website_published', '=', True)], expression.OR(slide_or)])
+            matched_slides = Slide.search(slide_dom)
 
-            Slide = request.env['slide.slide'].sudo()
-            matched_slides = Slide.search(slide_search, limit=50)
+            _logger.info("Search '%s': %d channels, %d slides", search_term, total_chan, len(matched_slides))
 
-            # 3) Overwrite only the changed keys in the template context
+            # 5) Update only the parts that changed
             values.update({
-                'channels':       channels,
-                'search_term':    search_term,
-                'search_count':   total,
-                'pager':          pager,
+                'channels':      channels,
+                'pager':         pager,
+                'search_term':   search_term,
+                'search_count':  total_chan,
                 'matched_slides': matched_slides,
             })
 
