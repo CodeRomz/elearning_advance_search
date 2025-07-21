@@ -2,7 +2,7 @@
 
 {
     "name": "Slides Course Search Extension",
-    "version": "1.1.0",
+    "version": "17.0.1.0.0",
     "category": "Website",
     "summary": "Extend OWL-based search in /slides with full content & tag matching",
     "description": """
