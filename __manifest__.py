@@ -17,9 +17,6 @@
     "depends": [
         "website_slides",
     ],
-    "data": [
-        "views/slide_templates.xml",
-    ],
     "auto_install": False,
     "installable": True,
     "application": False,
