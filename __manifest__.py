@@ -2,8 +2,7 @@
 
 {
     "name": "Slides Course Search Extension",
-    "version": "1.1.0",
-    "category": "Website",
+
     "summary": "Extend OWL-based search in /slides with full content & tag matching",
     "description": """
         This module enhances the Odoo 17 Community eLearning (/slides) page by adding
@@ -12,11 +11,19 @@
         - Slide titles and descriptions
         It renders matched results using extended OWL components and a JSON RPC controller.
     """,
-    "author": "CodeRomz",
-    "license": "LGPL-3",
-    "depends": [
-        "website_slides",
+
+    'author': 'CodeRomz',
+    'website': "https://github.com/CodeRomz",
+    'license': 'LGPL-3',
+    'version': '17.0.1.0.0',
+
+    "category": "Website",
+    "depends": ["website_slides"],
+
+    'data': [
+        'views/course_search_results.xml',
     ],
+
     "auto_install": False,
     "installable": True,
     "application": False,
