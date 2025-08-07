@@ -6,10 +6,9 @@ from odoo.osv import expression
 class WebsiteSlidesExtended(WebsiteSlides):
 
     @http.route(
-        ['/slides/all', '/slides/all/tag/<slug:slug_tags>'],
+        ['/slides/all', '/slides/all/tag/'],
         type='http', auth="public", website=True, sitemap=True
     )
-
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
         # Step 1: Delegate request handling (filters, redirects) to the parent
