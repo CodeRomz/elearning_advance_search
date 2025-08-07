@@ -11,7 +11,11 @@ class WebsiteSlidesExtended(WebsiteSlides):
 
     @http.route(
         ['/slides/all', '/slides/all/tag/<slug:slug_tags>'],
-        type='http', auth="public", website=True, sitemap=True
+        type='http',
+        auth="public",
+        website=True,
+        sitemap=True,
+        converters={'slug_tags': 'website.slug'}  #Fix for slug resolution
     )
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
@@ -28,7 +32,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
         try:
-            # Start with Odoo’s default values dict
+            # Step 1: Start with Odoo's default logic (filter bar, tags, sorters)
             values = super().slides_channel_all_values(
                 slide_category=slide_category,
                 slug_tags=slug_tags,
@@ -38,13 +42,14 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 **post
             )
 
+            # Step 2: Extract and sanitize search term
             search_term = (post.get('search') or '').strip()
             if search_term:
                 base_domain = [('website_published', '=', True)]
 
+                # Step 3: Respect Odoo native filters
                 if slug_tags:
-                    _logger.info("🔍 slug_tags received: %s", slug_tags.display_name)
-                    # SAFELY handle single tag record
+                    _logger.info("🔍 Filtering by slug tag: %s", slug_tags.display_name)
                     base_domain.append(('tag_ids', 'in', [slug_tags.id]))
 
                 if slide_category:
@@ -53,7 +58,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 if my:
                     base_domain.append(('member_ids.user_id', '=', request.env.user.id))
 
-                # OR logic for full-text search across course and slide fields
+                # Step 4: Build full-text search domain (title, desc, tags, slides)
                 or_clauses = [
                     [('name', 'ilike', search_term)],
                     [('description', 'ilike', search_term)],
@@ -64,6 +69,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 search_domain = expression.OR(or_clauses)
                 full_domain = expression.AND([base_domain, search_domain])
 
+                # Step 5: Fetch & paginate results
                 Channel = request.env['slide.channel'].sudo()
                 total = Channel.search_count(full_domain)
                 per_page = self._slides_per_page
@@ -82,7 +88,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
                     order=self._channel_order_by_criterion.get(sorting) or 'name asc',
                 )
 
-                # Only override the dynamic keys; leave tag filters, sortings, etc. intact
+                # Step 6: Inject final values for rendering
                 values.update({
                     'channels': channels,
                     'pager': pager,
