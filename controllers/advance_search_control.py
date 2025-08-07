@@ -2,6 +2,9 @@ from odoo import http
 from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
 from odoo.osv import expression
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class WebsiteSlidesExtended(WebsiteSlides):
@@ -24,65 +27,71 @@ class WebsiteSlidesExtended(WebsiteSlides):
 
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
-        values = super().slides_channel_all_values(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
-
-        search_term = (post.get('search') or '').strip()
-        if search_term:
-            base_domain = [('website_published', '=', True)]
-
-            #  tag_ids domain from slug_tags (recordset)
-            if slug_tags:
-                base_domain.append(('tag_ids', 'in', slug_tags.ids))
-
-            #  category filtering
-            if slide_category:
-                base_domain.append(('category_id', '=', slide_category))
-
-            #  "My courses" filter
-            if my:
-                base_domain.append(('member_ids.user_id', '=', request.env.user.id))
-
-            #  Full-text search across course + slide fields
-            or_clauses = [
-                [('name', 'ilike', search_term)],
-                [('description', 'ilike', search_term)],
-                [('tag_ids.name', 'ilike', search_term)],
-                [('slide_ids.name', 'ilike', search_term)],
-                [('slide_ids.html_content', 'ilike', search_term)],
-            ]
-            search_domain = expression.OR(or_clauses)
-            full_domain = expression.AND([base_domain, search_domain])
-
-            Channel = request.env['slide.channel'].sudo()
-            total = Channel.search_count(full_domain)
-            per_page = self._slides_per_page
-            offset = (int(page) - 1) * per_page
-            pager = request.website.pager(
-                url="/slides/all",
-                total=total,
+        try:
+            # Start with Odoo’s default values dict
+            values = super().slides_channel_all_values(
+                slide_category=slide_category,
+                slug_tags=slug_tags,
+                my=my,
                 page=page,
-                step=per_page,
-                url_args={**post, 'search': search_term},
-            )
-            channels = Channel.search(
-                full_domain,
-                limit=per_page,
-                offset=offset,
-                order=self._channel_order_by_criterion.get(sorting) or 'name asc',
+                sorting=sorting,
+                **post
             )
 
-            values.update({
-                'channels':     channels,
-                'pager':        pager,
-                'search_term':  search_term,
-                'search_count': total,
-            })
+            search_term = (post.get('search') or '').strip()
+            if search_term:
+                base_domain = [('website_published', '=', True)]
 
-        return values
+                if slug_tags:
+                    _logger.info("🔍 slug_tags received: %s", slug_tags.display_name)
+                    # SAFELY handle single tag record
+                    base_domain.append(('tag_ids', 'in', [slug_tags.id]))
+
+                if slide_category:
+                    base_domain.append(('category_id', '=', slide_category))
+
+                if my:
+                    base_domain.append(('member_ids.user_id', '=', request.env.user.id))
+
+                # OR logic for full-text search across course and slide fields
+                or_clauses = [
+                    [('name', 'ilike', search_term)],
+                    [('description', 'ilike', search_term)],
+                    [('tag_ids.name', 'ilike', search_term)],
+                    [('slide_ids.name', 'ilike', search_term)],
+                    [('slide_ids.html_content', 'ilike', search_term)],
+                ]
+                search_domain = expression.OR(or_clauses)
+                full_domain = expression.AND([base_domain, search_domain])
+
+                Channel = request.env['slide.channel'].sudo()
+                total = Channel.search_count(full_domain)
+                per_page = self._slides_per_page
+                offset = (int(page) - 1) * per_page
+                pager = request.website.pager(
+                    url="/slides/all",
+                    total=total,
+                    page=page,
+                    step=per_page,
+                    url_args={**post, 'search': search_term},
+                )
+                channels = Channel.search(
+                    full_domain,
+                    limit=per_page,
+                    offset=offset,
+                    order=self._channel_order_by_criterion.get(sorting) or 'name asc',
+                )
+
+                # Only override the dynamic keys; leave tag filters, sortings, etc. intact
+                values.update({
+                    'channels': channels,
+                    'pager': pager,
+                    'search_term': search_term,
+                    'search_count': total,
+                })
+
+            return values
+
+        except Exception as e:
+            _logger.exception("ERROR in slides_channel_all_values: %s", e)
+            raise
