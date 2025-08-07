@@ -20,10 +20,6 @@
     "category": "Website",
     "depends": ["website_slides"],
 
-    'data': [
-        'views/course_search_results.xml',
-    ],
-
     "auto_install": False,
     "installable": True,
     "application": False,
