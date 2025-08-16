@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+  <!-- Insert a compact "Matching content" block near the top of the page.
+       We anchor to #wrap to avoid class-name drift across themes. -->
   <template id="courses_all_include_matching_slides"
             inherit_id="website_slides.courses_all"
             name="Courses All - Include Matching Slides">
-    <!-- Insert a compact content block above the native courses grid -->
-    <xpath expr="//div[contains(@class,'o_wslides_courses')]" position="before">
+    <xpath expr="//div[@id='wrap']" position="inside">
       <t t-if="advanced_slides">
         <section class="container my-4">
           <div class="d-flex justify-content-between align-items-center mb-2">
@@ -26,7 +27,7 @@
                   <div class="card-body">
                     <div class="small text-muted" t-if="s.channel_id" t-esc="s.channel_id.name"/>
                     <h3 class="h6 mt-1 mb-2" t-esc="s.name"/>
-                    <p class="mb-0 text-muted" t-if="getattr(s, 'description', False)" t-esc="s.description"/>
+                    <p class="mb-0 text-muted" t-if="s.description" t-esc="s.description"/>
                   </div>
                 </a>
               </div>
