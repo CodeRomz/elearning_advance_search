@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!-- Add a page-specific body class for /slides/all -->
+  <template id="courses_all_bodyclass"
+            inherit_id="website_slides.courses_all"
+            name="Courses All - Body Class">
+    <!-- Set before website.layout so it applies to <body> -->
+    <xpath expr="//t[@t-call='website.layout']" position="before">
+      <t t-set="body_class" t-value="(body_class or '') + ' o_wslides_all_page'"/>
+    </xpath>
+  </template>
+</odoo>

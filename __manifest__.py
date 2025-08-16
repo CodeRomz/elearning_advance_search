@@ -22,6 +22,7 @@
 
     "data": [
         "views/advance_search_templates.xml",
+        "views/courses_all_bodyclass.xml",
     ],
 
     "assets": {
