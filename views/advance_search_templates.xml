@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <template id="courses_all_include_matching_slides"
+            inherit_id="website_slides.courses_all"
+            name="Courses All - Include Matching Slides">
+    <!-- Insert inside #wrap to avoid brittle class names -->
+    <xpath expr="//div[@id='wrap']" position="inside">
+      <t t-if="advanced_slides">
+        <section class="container my-4 pb-4">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h4 mb-0">
+              Matching content
+              <t t-if="advanced_slides_count and advanced_slides_count &gt; len(advanced_slides)">
+                <span class="text-muted small">
+                  (<t t-esc="len(advanced_slides)"/> of <t t-esc="advanced_slides_count"/>)
+                </span>
+              </t>
+            </h2>
+          </div>
+
+          <div class="row g-3">
+            <t t-foreach="advanced_slides" t-as="s">
+              <div class="col-12 col-md-6 col-lg-4">
+                <a t-att-href="s.website_url or ('/slides/slide/%s' % s.id)"
+                   class="card h-100 text-decoration-none">
+                  <div class="card-body">
+                    <div class="small text-muted" t-if="s.channel_id" t-esc="s.channel_id.name"/>
+                    <h3 class="h6 mt-1 mb-2" t-esc="s.name"/>
+                    <p class="mb-0 text-muted" t-if="s.description" t-esc="s.description"/>
+                  </div>
+                </a>
+              </div>
+            </t>
+          </div>
+        </section>
+      </t>
+    </xpath>
+  </template>
+</odoo>

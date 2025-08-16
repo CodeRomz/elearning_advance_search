@@ -20,6 +20,11 @@
     "category": "Website",
     "depends": ["website_slides"],
 
+    "data": [
+        "views/advance_search_templates.xml",
+        "views/courses_all_bodyclass.xml",
+    ],
+
     "auto_install": False,
     "installable": True,
     "application": False,

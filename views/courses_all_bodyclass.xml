@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!-- /slides/all: push the autocomplete menu ~50px below the input -->
+  <template id="courses_all_dropdown_offset"
+            inherit_id="website_slides.courses_all"
+            name="Courses All - Dropdown Offset">
+    <!-- Insert near the top of the page content -->
+    <xpath expr="//div[@id='wrap']" position="inside">
+      <style type="text/css">
+        /* runtime class created by Odoo's frontend on keypress */
+        .o_dropdown_menu.show { margin-top: 50px !important; }
+        /* also cover Bootstrap positioned dropdown if theme uses it */
+        .dropdown-menu[data-bs-popper].show { margin-top: 50px !important; }
+      </style>
+    </xpath>
+  </template>
+</odoo>
