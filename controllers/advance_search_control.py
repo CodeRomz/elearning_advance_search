@@ -9,142 +9,188 @@ from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
 from odoo.osv import expression
 
-
-MAX_SEARCH_LEN = 200  # guardrail for pathological queries
+# Tunables
+MAX_SEARCH_LEN = 200                # guardrail for pathological queries
+SLIDES_PREVIEW_LIMIT = 12           # how many slide hits to show
+SLIDES_OVERFETCH_MULTIPLIER = 3     # over-fetch before dedup to keep list full
 
 
 class WebsiteSlidesExtended(WebsiteSlides):
+    """
+    Extend eLearning search on /slides/all:
+    - Keep native filters, sorting, pager, and templates
+    - Add 'advanced_slides' for matching slide content with de-duplication
+    """
+
+    # IMPORTANT: do NOT bind '/slides' here; let Odoo render landing page natively.
     @http.route([
         '/slides/all',
         '/slides/all/tag/<string:slug_tags>',
     ], type='http', auth="public", website=True, sitemap=True)
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
-        # delegate to native controller
-        return super().slides_channel_all(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
+        """Delegate to the core route for redirects & default behavior."""
+        try:
+            return super().slides_channel_all(
+                slide_category=slide_category,
+                slug_tags=slug_tags,
+                my=my,
+                page=page,
+                sorting=sorting,
+                **post
+            )
+        except Exception as exc:
+            _logger.exception("AdvanceSearch: error in slides_channel_all: %s", exc)
+            raise
+        else:
+            pass
+        finally:
+            pass
 
+    # Optional: multi-website safety (if channels/slides have website_id)
     def _website_scope_domain(self):
-        """Multi-website friendly scope (optional but recommended)."""
-        Website = request.env['website']
-        Channel = request.env['slide.channel']
-        if 'website_id' in Channel._fields:  # CE/EE compatible safeguard
-            wid = request.website.id if request.website else False
-            # website-specific OR global (False) content
-            return ['|', ('website_id', '=', False), ('website_id', '=', wid)]
-        return []
+        try:
+            Channel = request.env['slide.channel']
+            if 'website_id' in Channel._fields and request.website:
+                wid = request.website.id
+                # allow global (=False) or current website
+                return ['|', ('website_id', '=', False), ('website_id', '=', wid)]
+            return []
+        except Exception as exc:
+            _logger.exception("AdvanceSearch: website scope failed: %s", exc)
+            return []
 
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
-        values = super().slides_channel_all_values(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
-
-        # --- bail out if no search term ---
-        raw = (post.get('search') or '').strip()
-        if not raw:
-            return values
-        search_term = raw[:MAX_SEARCH_LEN]  # soft cap
-
-        # --- build base filters shared by channels and slides ---
-        base_filters = [('website_published', '=', True)]
-        ws_scope = self._website_scope_domain()
-        if ws_scope:
-            base_filters.extend(ws_scope)
-
-        if slug_tags:
-            tags = self._channel_search_tags_slug(slug_tags)
-            if tags:
-                base_filters.append(('tag_ids', 'in', tags.ids))
-
-        if slide_category:
-            base_filters.append(('slide_category', '=', slide_category))
-
-        if my:
-            # Keep native “My courses” semantics
-            base_filters.append(('member_ids.user_id', '=', request.env.user.id))
-
-        # --- COURSE (channel) results
-        or_domains = expression.OR([
-            [('name', 'ilike', search_term)],
-            [('description', 'ilike', search_term)],
-            [('tag_ids.name', 'ilike', search_term)],
-            [('slide_ids.name', 'ilike', search_term)],
-            [('slide_ids.html_content', 'ilike', search_term)],
-        ])
-        channel_domain = expression.AND([list(base_filters), or_domains])
-
-        Channel = request.env['slide.channel'].sudo()
-        per_page = getattr(self, '_slides_per_page', 12)
+        """Inject advanced keyword search (courses + slides) with de-dup, keeping native filters."""
         try:
-            page_int = max(int(page), 1)
-        except Exception:
-            page_int = 1
+            # 1) Native values first (preserve tag_groups, search_tags, sortings, etc.)
+            values = super().slides_channel_all_values(
+                slide_category=slide_category,
+                slug_tags=slug_tags,
+                my=my,
+                page=page,
+                sorting=sorting,
+                **post
+            )
 
-        order_by = self._channel_order_by_criterion.get(sorting) or 'name asc'
-        total = Channel.search_count(channel_domain)
-        channels = Channel.search(
-            channel_domain,
-            limit=per_page,
-            offset=(page_int - 1) * per_page,
-            order=order_by,
-        )
+            # 2) Only act when a keyword is present
+            search_raw = (post.get('search') or '').strip()
+            if not search_raw:
+                return values
+            search_term = search_raw[:MAX_SEARCH_LEN]
 
-        pager = request.website.pager(
-            url=request.httprequest.path,     # preserve /tag/<slug> path
-            total=total,
-            page=page_int,
-            step=per_page,
-            url_args={**post, 'search': search_term},
-        )
+            # 3) Base filters shared by channels & slides (published + native filters)
+            base_filters = [('website_published', '=', True)]
+            ws_scope = self._website_scope_domain()
+            if ws_scope:
+                base_filters.extend(ws_scope)
 
-        # push course results
-        values.update({
-            'channels': channels,
-            'search_term': search_term,
-            'search_count': total,
-            'pager': pager,
-        })
+            if slug_tags:
+                tags = self._channel_search_tags_slug(slug_tags)
+                if tags:
+                    base_filters.append(('tag_ids', 'in', tags.ids))
 
-        # --- SLIDE results (compact block)
-        Slide = request.env['slide.slide'].sudo()
+            if slide_category:
+                base_filters.append(('slide_category', '=', slide_category))
 
-        # restrict slides to channels matching the same *filters* (not the keyword),
-        # then apply keyword at slide level → catches relevant content even if
-        # channel title/desc didn't match
-        allowed_channel_ids = Channel.search(list(base_filters)).ids or []
+            if my:
+                base_filters.append(('member_ids.user_id', '=', request.env.user.id))
 
-        slide_or = expression.OR([
-            [('name', 'ilike', search_term)],
-            [('html_content', 'ilike', search_term)],
-        ])
-        slide_domain = expression.AND([
-            [('website_published', '=', True)],
-            ws_scope or [],
-            [('channel_id', 'in', allowed_channel_ids)] if allowed_channel_ids else [('id', '=', 0)],
-            slide_or,
-        ])
+            # 4) COURSE (channel) results with advanced OR domain
+            channel_or = expression.OR([
+                [('name', 'ilike', search_term)],               # course title
+                [('description', 'ilike', search_term)],        # course description
+                [('tag_ids.name', 'ilike', search_term)],       # course tag names
+                [('slide_ids.name', 'ilike', search_term)],     # slide titles
+                [('slide_ids.html_content', 'ilike', search_term)],  # slide HTML/body
+            ])
+            channel_domain = expression.AND([list(base_filters), channel_or])
 
-        advanced_slides = Slide.search(
-            slide_domain,
-            limit=12,
-            order='date_published desc, id desc' if 'date_published' in Slide._fields else 'create_date desc, id desc',
-        )
-        advanced_slides_count = Slide.search_count(slide_domain)
+            Channel = request.env['slide.channel'].sudo()
+            try:
+                page_int = max(int(page), 1)
+            except Exception:
+                page_int = 1
+            per_page = getattr(self, '_slides_per_page', 12)
+            order_by = self._channel_order_by_criterion.get(sorting) or 'name asc'
 
-        values.update({
-            'advanced_slides': advanced_slides,
-            'advanced_slides_count': advanced_slides_count,
-        })
-        return values
+            total = Channel.search_count(channel_domain)
+            channels = Channel.search(
+                channel_domain,
+                limit=per_page,
+                offset=(page_int - 1) * per_page,
+                order=order_by,
+            )
+            pager = request.website.pager(
+                url=request.httprequest.path,  # keeps /slides/all or /slides/all/tag/<slug>
+                total=total,
+                page=page_int,
+                step=per_page,
+                url_args={**post, 'search': search_term},
+            )
+
+            # Push course results
+            values.update({
+                'channels': channels,
+                'search_term': search_term,
+                'search_count': total,
+                'pager': pager,
+            })
+
+            # 5) SLIDE results: same filter scope, keyword at slide level
+            Slide = request.env['slide.slide'].sudo()
+
+            # Restrict slides to channels matching the *filters* (not the keyword)
+            allowed_channel_ids = Channel.search(list(base_filters)).ids or []
+
+            slide_or = expression.OR([
+                [('name', 'ilike', search_term)],           # slide title
+                [('html_content', 'ilike', search_term)],   # slide HTML/body
+            ])
+            slide_domain = expression.AND([
+                [('website_published', '=', True)],
+                ws_scope or [],
+                [('channel_id', 'in', allowed_channel_ids)] if allowed_channel_ids else [('id', '=', 0)],
+                slide_or,
+            ])
+
+            # Over-fetch to allow explicit de-dup before slicing
+            display_limit = SLIDES_PREVIEW_LIMIT
+            fetch_limit = display_limit * SLIDES_OVERFETCH_MULTIPLIER
+            order_expr = (
+                'date_published desc, id desc'
+                if 'date_published' in Slide._fields else
+                'create_date desc, id desc'
+            )
+            fetched_slides = Slide.search(
+                slide_domain,
+                limit=fetch_limit,
+                order=order_expr,
+            )
+
+            # --- explicit de-dup by slide ID while preserving order ---
+            seen_ids = set()
+            unique_ids = []
+            for rec in fetched_slides:
+                if rec.id in seen_ids:
+                    continue
+                seen_ids.add(rec.id)
+                unique_ids.append(rec.id)
+
+            advanced_slides = Slide.browse(unique_ids[:display_limit])
+            advanced_slides_count = Slide.search_count(slide_domain)
+
+            values.update({
+                'advanced_slides': advanced_slides,
+                'advanced_slides_count': advanced_slides_count,
+            })
+            return values
+
+        except Exception as exc:
+            _logger.exception("AdvanceSearch: error in slides_channel_all_values: %s", exc)
+            raise
+        else:
+            pass
+        finally:
+            pass
