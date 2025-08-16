@@ -4,24 +4,12 @@
   <template id="courses_all_include_matching_slides"
             inherit_id="website_slides.courses_all"
             name="Courses All - Include Matching Slides">
-    <!-- Robust anchor: append inside #wrap (works across themes) -->
+    <!-- Robust anchor: append inside #wrap -->
     <xpath expr="//div[@id='wrap']" position="inside">
       <t t-if="advanced_slides">
-        <section id="o_wslides_matching_content" class="container my-4">
+        <section id="o_wslides_matching_content" class="container my-4 pb-4">
           <div class="d-flex justify-content-between align-items-center mb-2">
-            <h2 class="h4 mb-0">
-              Matching content
-              <t t-if="advanced_slides_count and advanced_slides_count &gt; len(advanced_slides)">
-                <span class="text-muted small">
-                  (<t t-esc="len(advanced_slides)"/> of <t t-esc="advanced_slides_count"/>)
-                </span>
-              </t>
-            </h2>
-            <!-- Optional 'View more' — reuses current path & query -->
-            <a t-att-href="request.httprequest.path + ('?search=' + (request.params.get('search') or ''))"
-               class="btn btn-outline-secondary btn-sm">
-              View more
-            </a>
+            <h2 class="h4 mb-0">Matching content</h2>
           </div>
 
           <div class="row g-3">

@@ -8,7 +8,7 @@ _logger = logging.getLogger(__name__)
 class Slide(models.Model):
     _inherit = "slide.slide"
 
-    # Speeds up ILIKE on big HTML by precomputing a light plaintext blob
+    # Precomputed plaintext for faster ILIKE on big HTML (optional; can be disabled)
     search_blob = fields.Text(
         string="Search Blob",
         compute="_compute_search_blob",
@@ -20,11 +20,10 @@ class Slide(models.Model):
     def _compute_search_blob(self):
         for s in self:
             try:
-                # Plain text from HTML, then collapse whitespace
                 html_txt = tools.html2plaintext(s.html_content or "")
                 parts = [s.name or "", s.description or "", html_txt or ""]
                 text = " ".join(filter(None, parts))
-                s.search_blob = " ".join(text.split())
+                s.search_blob = " ".join(text.split())  # collapse whitespace
             except Exception as exc:
                 _logger.exception("search_blob compute failed for slide %s: %s", s.id, exc)
                 s.search_blob = (s.name or "") + " " + (s.description or "")

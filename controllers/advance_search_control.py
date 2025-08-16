@@ -15,19 +15,17 @@ class WebsiteSlidesExtended(WebsiteSlides):
     Extend /slides/all:
     - Keep native filters (tags/category/my), sorting, and pager.
     - Add course+slide keyword search (title/desc/tags + slide title/content).
-    - Provide compact slide results with explicit de-duplication.
+    - Provide compact slide results with explicit de-duplication (no pagination).
     - Leave /slides (landing) completely native.
     """
 
     @http.route([
         "/slides/all",
         "/slides/all/tag/<string:slug_tags>",
-    ], type="http", auth="public", website=True, sitemap=True, readonly=True)
+    ], type="http", auth="public", website=True, sitemap=True)  # keep 17.0-safe signature
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
-        """
-        Delegate handling (redirects, base values) to core; we extend values().
-        """
+        """Delegate handling (redirects, base values) to core; we extend values()."""
         try:
             return super().slides_channel_all(
                 slide_category=slide_category,
@@ -41,14 +39,12 @@ class WebsiteSlidesExtended(WebsiteSlides):
             _logger.exception("AdvanceSearch: error in slides_channel_all: %s", exc)
             raise
         else:
-            # no-op — reserved for future instrumentation
             pass
         finally:
-            # keep style: explicit finally for user preference
             pass
 
     # -------------------------
-    # Helpers (modular & 18-ready)
+    # Helpers (modular)
     # -------------------------
     def _conf_int(self, key, default):
         """Fetch int system parameter safely."""
@@ -85,7 +81,6 @@ class WebsiteSlidesExtended(WebsiteSlides):
         if ws_scope:
             base.extend(ws_scope)
 
-        # tags via slug path
         if slug_tags:
             tags = self._channel_search_tags_slug(slug_tags)
             if tags:
@@ -95,7 +90,6 @@ class WebsiteSlidesExtended(WebsiteSlides):
         if slide_category:
             base.append(("slide_category", "=", slide_category))
 
-        # my courses (membership)
         if my:
             base.append(("member_ids.user_id", "=", request.env.user.id))
 
@@ -128,9 +122,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
     # -------------------------
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
-        """
-        Inject advanced keyword search while preserving native context.
-        """
+        """Inject advanced keyword search while preserving native context."""
         try:
             # 1) Native values first
             values = super().slides_channel_all_values(
@@ -175,14 +167,13 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 order=order_by,
             )
             pager = request.website.pager(
-                url=request.httprequest.path,  # keep /slides/all or /slides/all/tag/<slug>
+                url=request.httprequest.path,
                 total=total,
                 page=page_int,
                 step=per_page,
                 url_args={**post, "search": term},
             )
 
-            # Push course results (do NOT touch native filter context keys)
             values.update({
                 "channels": channels,
                 "search_term": term,
@@ -191,7 +182,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
             })
 
             # -------------------------
-            # 5) SLIDE results (compact block with dedup)
+            # 5) SLIDE results (compact block with de-dup; no count/pager)
             # -------------------------
             Slide = request.env["slide.slide"].sudo()
 
@@ -229,12 +220,8 @@ class WebsiteSlidesExtended(WebsiteSlides):
 
             advanced_slides = Slide.browse(unique_ids[:limit_preview])
 
-            show_count = self._conf_bool("elearning_advanced_search.show_slide_count", True)
-            advanced_slides_count = Slide.search_count(slide_domain) if show_count else len(advanced_slides)
-
             values.update({
-                "advanced_slides": advanced_slides,
-                "advanced_slides_count": advanced_slides_count,
+                "advanced_slides": advanced_slides
             })
             return values
 
@@ -242,8 +229,6 @@ class WebsiteSlidesExtended(WebsiteSlides):
             _logger.exception("AdvanceSearch: error in slides_channel_all_values: %s", exc)
             raise
         else:
-            # reserved for metrics
             pass
         finally:
-            # consistent style for user guidelines
             pass
