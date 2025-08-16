@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from odoo import http, models, fields, api, tools, _
-from . import code_romz_ai
 from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
 from odoo.exceptions import (
