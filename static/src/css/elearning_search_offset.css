@@ -1,14 +1,14 @@
 /* Only on the All Courses page */
 body[data-view-xmlid="website_slides.courses_all"] .o_dropdown_menu.show {
-  margin-top: 60px !important;   /* nudge suggestions down */
+  transform: translate3d(0, 50px, 0) !important; /* nudge suggestions down ~50px */
 }
 
-/* Fallback if your theme uses Bootstrap's dropdown element */
+/* Optional: also nudge Bootstrap dropdown variant if your theme uses it */
 body[data-view-xmlid="website_slides.courses_all"] .dropdown-menu[data-bs-popper].show {
-  margin-top: 60px !important;
+  margin-top: 50px !important;
 }
 
-/* Ensure the input stays visually above the list */
+/* Keep the input visually above the list, just in case */
 body[data-view-xmlid="website_slides.courses_all"] .o_searchbar_input,
 body[data-view-xmlid="website_slides.courses_all"] .o_website_search_input {
   position: relative;
