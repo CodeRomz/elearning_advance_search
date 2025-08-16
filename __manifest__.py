@@ -20,6 +20,10 @@
     "category": "Website",
     "depends": ["website_slides"],
 
+    "data": [
+        "views/advance_search_templates.xml",
+    ],
+
     "auto_install": False,
     "installable": True,
     "application": False,

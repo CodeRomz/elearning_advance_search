@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 from odoo import models, fields, api, tools, _
-from odoo.exceptions import (
-    UserError, ValidationError, RedirectWarning, AccessDenied,
-    AccessError, CacheMiss, MissingError
-)
+from odoo.exceptions import UserError, ValidationError, RedirectWarning, AccessDenied, AccessError, CacheMiss, MissingError
+import logging
+_logger = logging.getLogger(__name__)
+
 from odoo import http
 from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
 from odoo.osv import expression
 
-import logging
 
-_logger = logging.getLogger(__name__)
+MAX_SEARCH_LEN = 200  # guardrail for pathological queries
 
 
 class WebsiteSlidesExtended(WebsiteSlides):
@@ -21,111 +20,131 @@ class WebsiteSlidesExtended(WebsiteSlides):
     ], type='http', auth="public", website=True, sitemap=True)
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
-        try:
-            return super().slides_channel_all(
-                slide_category=slide_category,
-                slug_tags=slug_tags,
-                my=my,
-                page=page,
-                sorting=sorting,
-                **post
-            )
-        except Exception as exc:
-            _logger.exception("AdvanceSearch: error in slides_channel_all: %s", exc)
-            raise
-        finally:
-            # Structure placeholder to match user's style guide
-            pass
+        # delegate to native controller
+        return super().slides_channel_all(
+            slide_category=slide_category,
+            slug_tags=slug_tags,
+            my=my,
+            page=page,
+            sorting=sorting,
+            **post
+        )
+
+    def _website_scope_domain(self):
+        """Multi-website friendly scope (optional but recommended)."""
+        Website = request.env['website']
+        Channel = request.env['slide.channel']
+        if 'website_id' in Channel._fields:  # CE/EE compatible safeguard
+            wid = request.website.id if request.website else False
+            # website-specific OR global (False) content
+            return ['|', ('website_id', '=', False), ('website_id', '=', wid)]
+        return []
 
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
+        values = super().slides_channel_all_values(
+            slide_category=slide_category,
+            slug_tags=slug_tags,
+            my=my,
+            page=page,
+            sorting=sorting,
+            **post
+        )
 
-        try:
-            # 1) Get native values first (keeps tag_groups, search_tags, sortings, etc.)
-            values = super().slides_channel_all_values(
-                slide_category=slide_category,
-                slug_tags=slug_tags,
-                my=my,
-                page=page,
-                sorting=sorting,
-                **post
-            )
-
-            # 2) If no keyword, keep native behavior untouched
-            search_term = (post.get('search') or '').strip()
-            if not search_term:
-                return values
-
-            # 3) Base domain: published + applied native filters (tag/category/my)
-            base_domain = [('website_published', '=', True)]
-
-            if slug_tags:
-                tag_rs = self._channel_search_tags_slug(slug_tags)
-                if tag_rs:
-                    base_domain.append(('tag_ids', 'in', tag_rs.ids))
-
-            if slide_category:
-                base_domain.append(('slide_category', '=', slide_category))
-
-            if my:
-                base_domain.append(('member_ids.user_id', '=', request.env.user.id))
-
-            # 4) OR across course & slide content — all tuples (no list/tuple concat)
-            or_domains = [
-                [('name', 'ilike', search_term)],  # course title
-                [('description', 'ilike', search_term)],  # course description
-                [('tag_ids.name', 'ilike', search_term)],  # tag names
-                [('slide_ids.name', 'ilike', search_term)],  # slide titles
-                [('slide_ids.html_content', 'ilike', search_term)]  # slide HTML/body
-            ]
-            search_domain = expression.OR(or_domains)
-
-            # 5) Combine with existing filters
-            full_domain = expression.AND([base_domain, search_domain])
-
-            # 6) Pagination & sorting
-            Channel = request.env['slide.channel'].sudo()
-            total = Channel.search_count(full_domain)
-            per_page = getattr(self, '_slides_per_page', 12)
-
-            try:
-                page_int = max(int(page), 1)
-            except Exception:
-                page_int = 1
-
-            # Keep the current path (/slides/all or /slides/all/tag/<slug>) for pager
-            url_path = request.httprequest.path
-            url_args = dict(post)
-            url_args['search'] = search_term
-
-            pager = request.website.pager(
-                url=url_path,
-                total=total,
-                page=page_int,
-                step=per_page,
-                url_args=url_args,
-            )
-
-            order_by = self._channel_order_by_criterion.get(sorting) or 'name asc'
-            channels = Channel.search(
-                full_domain,
-                limit=per_page,
-                offset=(page_int - 1) * per_page,
-                order=order_by,
-            )
-
-            # 7) Only override result bits; leave native filter context intact
-            values.update({
-                'channels': channels,
-                'search_term': search_term,
-                'search_count': total,
-                'pager': pager,
-            })
+        # --- bail out if no search term ---
+        raw = (post.get('search') or '').strip()
+        if not raw:
             return values
+        search_term = raw[:MAX_SEARCH_LEN]  # soft cap
 
-        except Exception as exc:
-            _logger.exception("AdvanceSearch: error in slides_channel_all_values: %s", exc)
-            raise
-        finally:
-            # placeholder for future cleanup
-            pass
+        # --- build base filters shared by channels and slides ---
+        base_filters = [('website_published', '=', True)]
+        ws_scope = self._website_scope_domain()
+        if ws_scope:
+            base_filters.extend(ws_scope)
+
+        if slug_tags:
+            tags = self._channel_search_tags_slug(slug_tags)
+            if tags:
+                base_filters.append(('tag_ids', 'in', tags.ids))
+
+        if slide_category:
+            base_filters.append(('slide_category', '=', slide_category))
+
+        if my:
+            # Keep native “My courses” semantics
+            base_filters.append(('member_ids.user_id', '=', request.env.user.id))
+
+        # --- COURSE (channel) results
+        or_domains = expression.OR([
+            [('name', 'ilike', search_term)],
+            [('description', 'ilike', search_term)],
+            [('tag_ids.name', 'ilike', search_term)],
+            [('slide_ids.name', 'ilike', search_term)],
+            [('slide_ids.html_content', 'ilike', search_term)],
+        ])
+        channel_domain = expression.AND([list(base_filters), or_domains])
+
+        Channel = request.env['slide.channel'].sudo()
+        per_page = getattr(self, '_slides_per_page', 12)
+        try:
+            page_int = max(int(page), 1)
+        except Exception:
+            page_int = 1
+
+        order_by = self._channel_order_by_criterion.get(sorting) or 'name asc'
+        total = Channel.search_count(channel_domain)
+        channels = Channel.search(
+            channel_domain,
+            limit=per_page,
+            offset=(page_int - 1) * per_page,
+            order=order_by,
+        )
+
+        pager = request.website.pager(
+            url=request.httprequest.path,     # preserve /tag/<slug> path
+            total=total,
+            page=page_int,
+            step=per_page,
+            url_args={**post, 'search': search_term},
+        )
+
+        # push course results
+        values.update({
+            'channels': channels,
+            'search_term': search_term,
+            'search_count': total,
+            'pager': pager,
+        })
+
+        # --- SLIDE results (compact block)
+        Slide = request.env['slide.slide'].sudo()
+
+        # restrict slides to channels matching the same *filters* (not the keyword),
+        # then apply keyword at slide level → catches relevant content even if
+        # channel title/desc didn't match
+        allowed_channel_ids = Channel.search(list(base_filters)).ids or []
+
+        slide_or = expression.OR([
+            [('name', 'ilike', search_term)],
+            [('html_content', 'ilike', search_term)],
+        ])
+        slide_domain = expression.AND([
+            [('website_published', '=', True)],
+            ws_scope or [],
+            [('channel_id', 'in', allowed_channel_ids)] if allowed_channel_ids else [('id', '=', 0)],
+            slide_or,
+        ])
+
+        advanced_slides = Slide.search(
+            slide_domain,
+            limit=12,
+            order='date_published desc, id desc' if 'date_published' in Slide._fields else 'create_date desc, id desc',
+        )
+        advanced_slides_count = Slide.search_count(slide_domain)
+
+        values.update({
+            'advanced_slides': advanced_slides,
+            'advanced_slides_count': advanced_slides_count,
+        })
+        return values
