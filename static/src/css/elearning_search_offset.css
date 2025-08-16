@@ -1,20 +1,12 @@
-/* Apply on all eLearning pages (covers /slides and /slides/all) */
-body.o_wslides_body .o_dropdown_menu.show {
-  margin-top: 50px !important;                 /* primary nudge */
-}
 
-/* If your theme uses Bootstrap’s positioned dropdown variant */
-body.o_wslides_body .dropdown-menu[data-bs-popper].show {
+body.o_wslides_body .o_dropdown_menu.show {
   margin-top: 50px !important;
 }
 
-/* If Popper uses translate3d, uncomment this fallback to force the offset
-body.o_wslides_body .o_dropdown_menu.show {
-  transform: translate3d(0, 50px, 0) !important;
-}
-*/
+/*body.o_wslides_body .dropdown-menu[data-bs-popper].show {
+  margin-top: 50px !important;
+}*/
 
-/* Keep the input visually above the menu if layers overlap */
 body.o_wslides_body .o_searchbar_input,
 body.o_wslides_body .o_website_search_input {
   position: relative;
