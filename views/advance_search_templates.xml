@@ -1,19 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-  <!-- Insert a compact "Matching content" block near the top of the page.
-       We anchor to #wrap to avoid class-name drift across themes. -->
   <template id="courses_all_include_matching_slides"
             inherit_id="website_slides.courses_all"
             name="Courses All - Include Matching Slides">
+    <!-- Insert inside #wrap to avoid brittle class names -->
     <xpath expr="//div[@id='wrap']" position="inside">
       <t t-if="advanced_slides">
         <section class="container my-4">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h2 class="h4 mb-0">
               Matching content
-              <t t-if="advanced_slides_count and advanced_slides_count &gt; advanced_slides|length">
+              <t t-if="advanced_slides_count and advanced_slides_count &gt; len(advanced_slides)">
                 <span class="text-muted small">
-                  (<t t-esc="advanced_slides|length"/> of <t t-esc="advanced_slides_count"/>)
+                  (<t t-esc="len(advanced_slides)"/> of <t t-esc="advanced_slides_count"/>)
                 </span>
               </t>
             </h2>
