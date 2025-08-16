@@ -2,15 +2,3 @@
 body.o_wslides_body .o_dropdown_menu.show {
   margin-top: 50px !important;
 }
-
-/*body.o_wslides_body .dropdown-menu[data-bs-popper].show {
-  margin-top: 50px !important;
-}*/
-
-/*
-body.o_wslides_body .o_searchbar_input,
-body.o_wslides_body .o_website_search_input {
-  position: relative;
-  z-index: 1031;
-}
-*/
