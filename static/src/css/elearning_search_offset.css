@@ -5,7 +5,7 @@ body[data-view-xmlid="website_slides.courses_all"] .o_dropdown_menu.show {
 
 /* Fallback if your theme uses Bootstrap's dropdown element */
 body[data-view-xmlid="website_slides.courses_all"] .dropdown-menu[data-bs-popper].show {
-  margin-top: 50px !important;
+  margin-top: 60px !important;
 }
 
 /* Ensure the input stays visually above the list */
