@@ -6,7 +6,7 @@
     <!-- Insert inside #wrap to avoid brittle class names -->
     <xpath expr="//div[@id='wrap']" position="inside">
       <t t-if="advanced_slides">
-        <section class="container my-4">
+        <section class="container my-4 pb-4">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h2 class="h4 mb-0">
               Matching content
