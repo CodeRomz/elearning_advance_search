@@ -4,32 +4,23 @@ from odoo.exceptions import (
     UserError, ValidationError, RedirectWarning, AccessDenied,
     AccessError, CacheMiss, MissingError
 )
-import logging
-_logger = logging.getLogger(__name__)
-
 from odoo import http
 from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
 from odoo.osv import expression
 
+import logging
+
+_logger = logging.getLogger(__name__)
+
 
 class WebsiteSlidesExtended(WebsiteSlides):
-    """
-    Extend eLearning search on /slides/all while preserving native filters,
-    templates, and the separate /slides landing page behavior.
-    """
-
-    # ⚠️ IMPORTANT: Do NOT bind '/slides' here, we leave that to Odoo's native route.
     @http.route([
         '/slides/all',
         '/slides/all/tag/<string:slug_tags>',
     ], type='http', auth="public", website=True, sitemap=True)
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
-        """
-        Delegate to the core route for redirects & default behavior.
-        We only hook our logic in slides_channel_all_values().
-        """
         try:
             return super().slides_channel_all(
                 slide_category=slide_category,
@@ -48,10 +39,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
 
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
-        """
-        Inject advanced keyword search (course + slides) without breaking
-        native filters, counts, tag UI, or templates.
-        """
+
         try:
             # 1) Get native values first (keeps tag_groups, search_tags, sortings, etc.)
             values = super().slides_channel_all_values(
@@ -84,11 +72,11 @@ class WebsiteSlidesExtended(WebsiteSlides):
 
             # 4) OR across course & slide content — all tuples (no list/tuple concat)
             or_domains = [
-                [('name', 'ilike', search_term)],                  # course title
-                [('description', 'ilike', search_term)],           # course description
-                [('tag_ids.name', 'ilike', search_term)],          # tag names
-                [('slide_ids.name', 'ilike', search_term)],        # slide titles
-                [('slide_ids.html_content', 'ilike', search_term)] # slide HTML/body
+                [('name', 'ilike', search_term)],  # course title
+                [('description', 'ilike', search_term)],  # course description
+                [('tag_ids.name', 'ilike', search_term)],  # tag names
+                [('slide_ids.name', 'ilike', search_term)],  # slide titles
+                [('slide_ids.html_content', 'ilike', search_term)]  # slide HTML/body
             ]
             search_domain = expression.OR(or_domains)
 
