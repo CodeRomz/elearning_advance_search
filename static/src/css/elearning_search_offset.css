@@ -1,6 +1,6 @@
 /* Only on the All Courses page */
 body[data-view-xmlid="website_slides.courses_all"] .o_dropdown_menu.show {
-  margin-top: 50px !important;   /* nudge suggestions down */
+  margin-top: 60px !important;   /* nudge suggestions down */
 }
 
 /* Fallback if your theme uses Bootstrap's dropdown element */
