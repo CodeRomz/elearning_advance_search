@@ -25,12 +25,6 @@
         "views/courses_all_bodyclass.xml",
     ],
 
-    "assets": {
-        "web.assets_frontend": [
-            "elearning_advance_search/static/src/css/elearning_search_offset.css",
-        ],
-    },
-
     "auto_install": False,
     "installable": True,
     "application": False,
