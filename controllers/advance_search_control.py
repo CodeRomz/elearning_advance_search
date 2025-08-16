@@ -1,90 +1,131 @@
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, tools, _
+from odoo.exceptions import (
+    UserError, ValidationError, RedirectWarning, AccessDenied,
+    AccessError, CacheMiss, MissingError
+)
 from odoo import http
 from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
 from odoo.osv import expression
 
-class WebsiteSlidesExtended(WebsiteSlides):
+import logging
 
-    @http.route(
-        ['/slides/all', '/slides/all/tag/'],
-        type='http', auth="public", website=True, sitemap=True
-    )
+_logger = logging.getLogger(__name__)
+
+
+class WebsiteSlidesExtended(WebsiteSlides):
+    @http.route([
+        '/slides/all',
+        '/slides/all/tag/<string:slug_tags>',
+    ], type='http', auth="public", website=True, sitemap=True)
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
-        # Step 1: Delegate request handling (filters, redirects) to the parent
-        return super().slides_channel_all(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
+        try:
+            return super().slides_channel_all(
+                slide_category=slide_category,
+                slug_tags=slug_tags,
+                my=my,
+                page=page,
+                sorting=sorting,
+                **post
+            )
+        except Exception as exc:
+            _logger.exception("AdvanceSearch: error in slides_channel_all: %s", exc)
+            raise
+        finally:
+            # Structure placeholder to match user's style guide
+            pass
 
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
-        # Step 2: Get the original context (searchbar, tag_groups, sortings, etc.)
-        values = super().slides_channel_all_values(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
 
-        search_term = (post.get('search') or '').strip()
-        if search_term:
-            # Step 3: Build base domain (published + existing filters)
+        try:
+            # 1) Get native values first (keeps tag_groups, search_tags, sortings, etc.)
+            values = super().slides_channel_all_values(
+                slide_category=slide_category,
+                slug_tags=slug_tags,
+                my=my,
+                page=page,
+                sorting=sorting,
+                **post
+            )
+
+            # 2) If no keyword, keep native behavior untouched
+            search_term = (post.get('search') or '').strip()
+            if not search_term:
+                return values
+
+            # 3) Base domain: published + applied native filters (tag/category/my)
             base_domain = [('website_published', '=', True)]
+
             if slug_tags:
                 tag_rs = self._channel_search_tags_slug(slug_tags)
-                base_domain.append(('tag_ids', 'in', tag_rs.ids))
+                if tag_rs:
+                    base_domain.append(('tag_ids', 'in', tag_rs.ids))
+
             if slide_category:
                 base_domain.append(('slide_category', '=', slide_category))
+
             if my:
                 base_domain.append(('member_ids.user_id', '=', request.env.user.id))
 
-            # Step 4: Build OR-clause list for extended search
-            or_clauses = [
-                [('name', 'ilike', search_term)],                    # channel title
-                [('description', 'ilike', search_term)],             # channel description
-                [('tag_ids.name', 'ilike', search_term)],            # channel tags
-                [('slide_ids.name', 'ilike', search_term)],          # slide titles
-                [('slide_ids.html_content', 'ilike', search_term)],  # slide HTML content
+            # 4) OR across course & slide content — all tuples (no list/tuple concat)
+            or_domains = [
+                [('name', 'ilike', search_term)],  # course title
+                [('description', 'ilike', search_term)],  # course description
+                [('tag_ids.name', 'ilike', search_term)],  # tag names
+                [('slide_ids.name', 'ilike', search_term)],  # slide titles
+                [('slide_ids.html_content', 'ilike', search_term)]  # slide HTML/body
             ]
-            search_domain = expression.OR(or_clauses)
+            search_domain = expression.OR(or_domains)
 
-            # Combine filters + search
+            # 5) Combine with existing filters
             full_domain = expression.AND([base_domain, search_domain])
 
-            # Step 5: Rebuild pagination (avoid pager['step'] KeyError)
+            # 6) Pagination & sorting
             Channel = request.env['slide.channel'].sudo()
             total = Channel.search_count(full_domain)
-            per_page = self._slides_per_page
-            offset = (int(page) - 1) * per_page
+            per_page = getattr(self, '_slides_per_page', 12)
+
+            try:
+                page_int = max(int(page), 1)
+            except Exception:
+                page_int = 1
+
+            # Keep the current path (/slides/all or /slides/all/tag/<slug>) for pager
+            url_path = request.httprequest.path
+            url_args = dict(post)
+            url_args['search'] = search_term
+
             pager = request.website.pager(
-                url="/slides/all",
+                url=url_path,
                 total=total,
-                page=page,
+                page=page_int,
                 step=per_page,
-                url_args={**post, 'search': search_term},
+                url_args=url_args,
             )
 
-            # Step 6: Fetch the current page of channels
+            order_by = self._channel_order_by_criterion.get(sorting) or 'name asc'
             channels = Channel.search(
                 full_domain,
                 limit=per_page,
-                offset=offset,
-                order=self._channel_order_by_criterion.get(sorting) or 'name asc',
+                offset=(page_int - 1) * per_page,
+                order=order_by,
             )
 
-            # Step 7: Overwrite only the changed context keys
+            # 7) Only override result bits; leave native filter context intact
             values.update({
-                'channels':     channels,
-                'search_term':  search_term,
+                'channels': channels,
+                'search_term': search_term,
                 'search_count': total,
-                'pager':        pager,
+                'pager': pager,
             })
+            return values
 
-        return values
+        except Exception as exc:
+            _logger.exception("AdvanceSearch: error in slides_channel_all_values: %s", exc)
+            raise
+        finally:
+            # placeholder for future cleanup
+            pass
