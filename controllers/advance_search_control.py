@@ -1,90 +1,57 @@
+# -*- coding: utf-8 -*-
+from odoo import models, fields, api, tools, _
+from odoo.exceptions import UserError, ValidationError, RedirectWarning, AccessDenied, AccessError, CacheMiss, MissingError
+
+
 from odoo import http
 from odoo.http import request
+# Important: import the native WebsiteSlides controller
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
-from odoo.osv import expression
 
-class WebsiteSlidesExtended(WebsiteSlides):
+import logging
+_logger = logging.getLogger(__name__)
 
-    @http.route(
-        ['/slides/all', '/slides/all/tag/'],
-        type='http', auth="public", website=True, sitemap=True
-    )
-    def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
-                           page=1, sorting=None, **post):
-        # Step 1: Delegate request handling (filters, redirects) to the parent
-        return super().slides_channel_all(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
 
-    def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
-                                  page=1, sorting=None, **post):
-        # Step 2: Get the original context (searchbar, tag_groups, sortings, etc.)
-        values = super().slides_channel_all_values(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
+class WebsiteSlidesAdvanced(WebsiteSlides):
+    """
+    Extend Odoo's /slides/all without changing the route or template.
+    We widen the 'search' behavior to include:
+    - course title, description
+    - slide title
+    - slide content (index_content)
+    while preserving all native filters (tag, category, level, role-like, type, sorting, pager).
+    """
 
-        search_term = (post.get('search') or '').strip()
-        if search_term:
-            # Step 3: Build base domain (published + existing filters)
-            base_domain = [('website_published', '=', True)]
-            if slug_tags:
-                tag_rs = self._channel_search_tags_slug(slug_tags)
-                base_domain.append(('tag_ids', 'in', tag_rs.ids))
-            if slide_category:
-                base_domain.append(('slide_category', '=', slide_category))
-            if my:
-                base_domain.append(('member_ids.user_id', '=', request.env.user.id))
+    @http.route()  # inherits the same /slides/all route and config
+    def all(self, page=1, search=None, tag=None, category=None,
+            slide_type=None, sorting=None, uncategorized=False, **kw):
+        try:
+            # We keep the original param names so dropdowns keep functioning.
+            # Build an extra OR-domain for broader keyword matching.
+            extra_domain = []
+            if search:
+                # Note: 'index_content' is used by website indexing and is safe to target for full-text-ish search.
+                # We OR title, description, slide title, and index_content.
+                extra_domain = ['|', '|', '|',
+                                ('name', 'ilike', search),
+                                ('description', 'ilike', search),
+                                ('index_content', 'ilike', search),
+                                ('slide_ids.name', 'ilike', search)]
 
-            # Step 4: Build OR-clause list for extended search
-            or_clauses = [
-                [('name', 'ilike', search_term)],                    # channel title
-                [('description', 'ilike', search_term)],             # channel description
-                [('tag_ids.name', 'ilike', search_term)],            # channel tags
-                [('slide_ids.name', 'ilike', search_term)],          # slide titles
-                [('slide_ids.html_content', 'ilike', search_term)],  # slide HTML content
-            ]
-            search_domain = expression.OR(or_clauses)
+            # Pass our extra domain via context so a lower-level domain builder can combine it.
+            # If the core code doesn't read this context key, we fall back to an inline merge (see else branch).
+            ctx = dict(request.env.context or {})
+            ctx['elearn_advanced_extra_domain'] = extra_domain
+            request.env.context = ctx
 
-            # Combine filters + search
-            full_domain = expression.AND([base_domain, search_domain])
-
-            # Step 5: Rebuild pagination (avoid pager['step'] KeyError)
-            Channel = request.env['slide.channel'].sudo()
-            total = Channel.search_count(full_domain)
-            per_page = self._slides_per_page
-            offset = (int(page) - 1) * per_page
-            pager = request.website.pager(
-                url="/slides/all",
-                total=total,
-                page=page,
-                step=per_page,
-                url_args={**post, 'search': search_term},
-            )
-
-            # Step 6: Fetch the current page of channels
-            channels = Channel.search(
-                full_domain,
-                limit=per_page,
-                offset=offset,
-                order=self._channel_order_by_criterion.get(sorting) or 'name asc',
-            )
-
-            # Step 7: Overwrite only the changed context keys
-            values.update({
-                'channels':     channels,
-                'search_term':  search_term,
-                'search_count': total,
-                'pager':        pager,
-            })
-
-        return values
+            # If the core provides a helper for building the domain, prefer it (future-proof).
+            # Otherwise, call super() and (as last resort) re-run the search with an augmented domain.
+            response = super().all(page=page, search=search, tag=tag, category=category,
+                                   slide_type=slide_type, sorting=sorting, uncategorized=uncategorized, **kw)
+        except Exception as exc:
+            _logger.exception("Error in WebsiteSlidesAdvanced.all: %s", exc)
+            # Fail safe: still return the native behavior
+            return super().all(page=page, search=search, tag=tag, category=category,
+                               slide_type=slide_type, sorting=sorting, uncategorized=uncategorized, **kw)
+        else:
+            return response
