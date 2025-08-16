@@ -16,13 +16,7 @@ SLIDES_OVERFETCH_MULTIPLIER = 3     # over-fetch before dedup to keep list full
 
 
 class WebsiteSlidesExtended(WebsiteSlides):
-    """
-    Extend eLearning search on /slides/all:
-    - Keep native filters, sorting, pager, and templates
-    - Add 'advanced_slides' for matching slide content with de-duplication
-    """
 
-    # IMPORTANT: do NOT bind '/slides' here; let Odoo render landing page natively.
     @http.route([
         '/slides/all',
         '/slides/all/tag/<string:slug_tags>',
@@ -47,7 +41,6 @@ class WebsiteSlidesExtended(WebsiteSlides):
         finally:
             pass
 
-    # Optional: multi-website safety (if channels/slides have website_id)
     def _website_scope_domain(self):
         try:
             Channel = request.env['slide.channel']
@@ -62,9 +55,7 @@ class WebsiteSlidesExtended(WebsiteSlides):
 
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
-        """Inject advanced keyword search (courses + slides) with de-dup, keeping native filters."""
         try:
-            # 1) Native values first (preserve tag_groups, search_tags, sortings, etc.)
             values = super().slides_channel_all_values(
                 slide_category=slide_category,
                 slug_tags=slug_tags,
@@ -74,13 +65,11 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 **post
             )
 
-            # 2) Only act when a keyword is present
             search_raw = (post.get('search') or '').strip()
             if not search_raw:
                 return values
             search_term = search_raw[:MAX_SEARCH_LEN]
 
-            # 3) Base filters shared by channels & slides (published + native filters)
             base_filters = [('website_published', '=', True)]
             ws_scope = self._website_scope_domain()
             if ws_scope:
@@ -97,7 +86,6 @@ class WebsiteSlidesExtended(WebsiteSlides):
             if my:
                 base_filters.append(('member_ids.user_id', '=', request.env.user.id))
 
-            # 4) COURSE (channel) results with advanced OR domain
             channel_or = expression.OR([
                 [('name', 'ilike', search_term)],               # course title
                 [('description', 'ilike', search_term)],        # course description
@@ -123,14 +111,13 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 order=order_by,
             )
             pager = request.website.pager(
-                url=request.httprequest.path,  # keeps /slides/all or /slides/all/tag/<slug>
+                url=request.httprequest.path,
                 total=total,
                 page=page_int,
                 step=per_page,
                 url_args={**post, 'search': search_term},
             )
 
-            # Push course results
             values.update({
                 'channels': channels,
                 'search_term': search_term,
@@ -138,10 +125,8 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 'pager': pager,
             })
 
-            # 5) SLIDE results: same filter scope, keyword at slide level
             Slide = request.env['slide.slide'].sudo()
 
-            # Restrict slides to channels matching the *filters* (not the keyword)
             allowed_channel_ids = Channel.search(list(base_filters)).ids or []
 
             slide_or = expression.OR([
@@ -155,7 +140,6 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 slide_or,
             ])
 
-            # Over-fetch to allow explicit de-dup before slicing
             display_limit = SLIDES_PREVIEW_LIMIT
             fetch_limit = display_limit * SLIDES_OVERFETCH_MULTIPLIER
             order_expr = (
@@ -169,7 +153,6 @@ class WebsiteSlidesExtended(WebsiteSlides):
                 order=order_expr,
             )
 
-            # --- explicit de-dup by slide ID while preserving order ---
             seen_ids = set()
             unique_ids = []
             for rec in fetched_slides:
