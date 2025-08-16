@@ -1,96 +1,134 @@
-from odoo import http
+# -*- coding: utf-8 -*-
+from odoo import http, models, fields, api, tools, _
+from . import code_romz_ai
 from odoo.http import request
 from odoo.addons.website_slides.controllers.main import WebsiteSlides
+from odoo.exceptions import (
+    UserError, ValidationError, RedirectWarning, AccessDenied,
+    AccessError, CacheMiss, MissingError
+)
 from odoo.osv import expression
+import logging
+
+_logger = logging.getLogger(__name__)
+
 
 class WebsiteSlidesExtended(WebsiteSlides):
+    """Extend eLearning search while preserving native filters and rendering."""
 
     @http.route([
         '/slides',
-        '/slides/tag/<string:slug_tags>',              # Main courses page (alias for all)
+        '/slides/tag/<string:slug_tags>',
         '/slides/all',
-        '/slides/all/tag/<string:slug_tags>'           # All courses page with tag filter
+        '/slides/all/tag/<string:slug_tags>',
     ], type='http', auth="public", website=True, sitemap=True)
     def slides_channel_all(self, slide_category=None, slug_tags=None, my=False,
                            page=1, sorting=None, **post):
-        """Handle both /slides and /slides/all routes, including tag filtering,
-        by delegating to the parent controller."""
-        return super().slides_channel_all(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
+        """Delegate to core for all redirects/filters; we only extend values()."""
+        try:
+            return super().slides_channel_all(
+                slide_category=slide_category,
+                slug_tags=slug_tags,
+                my=my,
+                page=page,
+                sorting=sorting,
+                **post
+            )
+        except Exception as exc:
+            _logger.exception("Error in slides_channel_all: %s", exc)
+            raise
+        finally:
+            # no-op; placeholder to satisfy user's structured style
+            pass
 
     def slides_channel_all_values(self, slide_category=None, slug_tags=None, my=False,
                                   page=1, sorting=None, **post):
-        """Extend the context values for /slides/all page to include advanced search."""
-        # Step 1: Get default values from the core implementation (preserves filters, etc.)
-        values = super().slides_channel_all_values(
-            slide_category=slide_category,
-            slug_tags=slug_tags,
-            my=my,
-            page=page,
-            sorting=sorting,
-            **post
-        )
+        """Inject advanced keyword search (course + slides) without breaking filters."""
+        try:
+            # 1) Get native values (keeps tag_groups, search_tags, sortings, etc.)
+            values = super().slides_channel_all_values(
+                slide_category=slide_category,
+                slug_tags=slug_tags,
+                my=my,
+                page=page,
+                sorting=sorting,
+                **post
+            )
 
-        # Step 2: If a search term is entered, build an extended search domain
-        search_term = (post.get('search') or '').strip()
-        if search_term:
-            # Base domain: published courses + applied filters (tag, category, my)
+            # 2) If no keyword, keep native behavior untouched
+            search_term = (post.get('search') or '').strip()
+            if not search_term:
+                return values
+
+            # 3) Base domain: published + applied native filters
             base_domain = [('website_published', '=', True)]
+
             if slug_tags:
                 tag_rs = self._channel_search_tags_slug(slug_tags)
-                base_domain.append(('tag_ids', 'in', tag_rs.ids))
+                if tag_rs:
+                    base_domain.append(('tag_ids', 'in', tag_rs.ids))
+
             if slide_category:
                 base_domain.append(('slide_category', '=', slide_category))
+
             if my:
                 base_domain.append(('member_ids.user_id', '=', request.env.user.id))
 
-            # OR clauses for each field to search
-            search_term_ilike = [('ilike', search_term)]
+            # 4) OR blocks across course & slide content (all tuples, no concat tricks)
             or_domains = [
-                [('name',) + search_term_ilike],               # course title
-                [('description',) + search_term_ilike],        # course description
-                [('tag_ids.name',) + search_term_ilike],       # course tag names
-                [('slide_ids.name',) + search_term_ilike],     # slide titles
-                [('slide_ids.html_content',) + search_term_ilike],  # slide content
+                [('name', 'ilike', search_term)],                 # course title
+                [('description', 'ilike', search_term)],          # course description
+                [('tag_ids.name', 'ilike', search_term)],         # tag names
+                [('slide_ids.name', 'ilike', search_term)],       # slide titles
+                [('slide_ids.html_content', 'ilike', search_term)]  # slide HTML/body
             ]
             search_domain = expression.OR(or_domains)
 
-            # Combine the base filters with the search domain
+            # 5) Combine with existing filters
             full_domain = expression.AND([base_domain, search_domain])
 
-            # Compute total results and prepare pagination
+            # 6) Pagination & sorting (preserve current path for pager URL)
             Channel = request.env['slide.channel'].sudo()
             total = Channel.search_count(full_domain)
-            per_page = self._slides_per_page    # default number of courses per page (from core)
-            page = int(page) or 1
+            per_page = getattr(self, '_slides_per_page', 12)
+            try:
+                page_int = int(page) if int(page) > 0 else 1
+            except Exception:
+                page_int = 1
+
+            url_path = request.httprequest.path  # keeps /slides vs /slides/all and /tag/<slug>
+            url_args = dict(post)
+            url_args['search'] = search_term
+
             pager = request.website.pager(
-                url="/slides/all",
+                url=url_path,
                 total=total,
-                page=page,
+                page=page_int,
                 step=per_page,
-                url_args={**post, 'search': search_term},
+                url_args=url_args,
             )
 
-            # Fetch the courses matching the search (for the current page)
-            courses = Channel.search(
+            order_by = self._channel_order_by_criterion.get(sorting) or 'name asc'
+
+            channels = Channel.search(
                 full_domain,
                 limit=per_page,
-                offset=(page-1) * per_page,
-                order=self._channel_order_by_criterion.get(sorting) or 'name asc',
+                offset=(page_int - 1) * per_page,
+                order=order_by,
             )
 
-            # Step 3: Update values with our search results
+            # 7) Only override the result bits; keep native filter context intact
             values.update({
-                'channels': courses,          # courses to display
-                'search_term': search_term,   # echo the search query (for template display)
-                'search_count': total,        # number of results found
-                'pager': pager,              # updated pager for navigation
+                'channels': channels,
+                'search_term': search_term,
+                'search_count': total,
+                'pager': pager,
             })
-            # (We do not touch 'tag_groups' or 'search_tags', they remain from super())
-        return values
+            return values
+
+        except Exception as exc:
+            _logger.exception("Error in slides_channel_all_values: %s", exc)
+            raise
+        finally:
+            # placeholder for any cleanup if needed later
+            pass
