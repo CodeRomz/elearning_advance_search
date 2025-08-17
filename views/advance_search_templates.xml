@@ -21,8 +21,8 @@
                     <div class="small text-muted" t-if="s.channel_id" t-esc="s.channel_id.name"/>
                     <h3 class="h6 mt-1 mb-2" t-esc="s.name"/>
                     <t t-set="desc" t-value="(s.description or '').strip()"/>
-                    <p class="mb-0 text-muted" t-if="desc"
-                       t-esc="desc[:160] + ('…' if len(desc) &gt; 160 else '')"/>
+                    <p style="color: #6e6e6e;" class="mb-0 text-muted"
+                       t-if="desc" t-esc="desc[:100] + ('…' if len(desc) &gt; 100 else '')"/>
                   </div>
                 </a>
               </div>
